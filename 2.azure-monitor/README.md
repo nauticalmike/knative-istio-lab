@@ -87,6 +87,7 @@ You should see different key-value pairs being printout corresponding to the met
 kubectl get pods -n kube-system
 ```
 You should see and `omsagent` pod running:
+
 ![](../images/omsagent-pod.png)
 
     If you don't see the pod, probably Monitor is not enabled on your AKS cluster, follow this [article](https://docs.microsoft.com/en-us/azure/azure-monitor/containers/container-insights-onboard) to set it up. 
