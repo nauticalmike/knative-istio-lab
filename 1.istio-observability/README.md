@@ -162,7 +162,7 @@ Quick lab on how to use Istio + Knative
     istioctl dashboard prometheus
     ```
 
-    - In the search field enter the metric named istio_requests_total, and click the Execute button (on the right).
+    - In the search field enter the metric named `istio_requests_total`, and click the Execute button (on the right).
 
     - Select the tab named Graph to obtain a graphical representation of this metric over time.
 

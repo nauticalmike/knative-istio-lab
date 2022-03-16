@@ -1,19 +1,6 @@
-apiVersion: v1
 kind: ConfigMap
-metadata:
-  annotations:
-    kubectl.kubernetes.io/last-applied-configuration: |
-      {"apiVersion":"v1","data":{"CLUSTER_RESOURCE_ID":"/subscriptions/9a42948e-6087-47d2-bdb8-b530d558db22/resourceGroups/nauticalmike-rg/providers/Microsoft.ContainerService/managedClusters/nauticalmike-kpmg"},"kind":"ConfigMap","metadata":{"annotations":{},"labels":{"addonmanager.kubernetes.io/mode":"Reconcile","kubernetes.io/cluster-service":"true"},"name":"container-azm-ms-aks-k8scluster","namespace":"kube-system"}}
-  creationTimestamp: "2022-03-09T22:51:12Z"
-  labels:
-    addonmanager.kubernetes.io/mode: Reconcile
-    kubernetes.io/cluster-service: "true"
-  name: container-azm-ms-aks-k8scluster
-  namespace: kube-system
-  resourceVersion: "516"
-  uid: 587b75ac-19ce-4409-bee1-c476ced7ed65
+apiVersion: v1
 data:
-  CLUSTER_RESOURCE_ID: /subscriptions/9a42948e-6087-47d2-bdb8-b530d558db22/resourceGroups/nauticalmike-rg/providers/Microsoft.ContainerService/managedClusters/nauticalmike-kpmg
   schema-version:
     #string.used by agent to parse config. supported versions are {v1}. Configs with other schema versions will be rejected by the agent.
     v1
@@ -23,6 +10,7 @@ data:
   log-data-collection-settings: |-
     # Log data collection settings
     # Any errors related to config map settings can be found in the KubeMonAgentEvents table in the Log Analytics workspace that the cluster is sending data to.
+
     [log_collection_settings]
        [log_collection_settings.stdout]
           # In the absense of this configmap, default value for enabled is true
@@ -32,6 +20,7 @@ data:
           # If you want to continue to disable kube-system log collection keep this namespace in the following setting and add any other namespace you want to disable log collection to the array.
           # In the absense of this configmap, default value for exclude_namespaces = ["kube-system"]
           exclude_namespaces = ["kube-system"]
+
        [log_collection_settings.stderr]
           # Default value for enabled is true
           enabled = true
@@ -40,6 +29,7 @@ data:
           # If you want to continue to disable kube-system log collection keep this namespace in the following setting and add any other namespace you want to disable log collection to the array.
           # In the absense of this cofigmap, default value for exclude_namespaces = ["kube-system"]
           exclude_namespaces = ["kube-system"]
+
        [log_collection_settings.env_var]
           # In the absense of this configmap, default value for enabled is true
           enabled = true
@@ -57,35 +47,48 @@ data:
     [prometheus_data_collection_settings.cluster]
         # Cluster level scrape endpoint(s). These metrics will be scraped from agent's Replicaset (singleton)
         # Any errors related to prometheus scraping can be found in the KubeMonAgentEvents table in the Log Analytics workspace that the cluster is sending data to.
+
         #Interval specifying how often to scrape for metrics. This is duration of time and can be specified for supporting settings by combining an integer value and time unit as a string value. Valid time units are ns, us (or µs), ms, s, m, h.
         interval = "1m"
+
         ## Uncomment the following settings with valid string arrays for prometheus scraping
         #fieldpass = ["metric_to_pass1", "metric_to_pass12"]
+
         #fielddrop = ["metric_to_drop"]
+
         # An array of urls to scrape metrics from.
         # urls = ["http://myurl:9101/metrics"]
+
         # An array of Kubernetes services to scrape metrics from.
         # kubernetes_services = ["http://my-service-dns.my-namespace:9102/metrics"]
+
         # When monitor_kubernetes_pods = true, replicaset will scrape Kubernetes pods for the following prometheus annotations:
         # - prometheus.io/scrape: Enable scraping for this pod
         # - prometheus.io/scheme: If the metrics endpoint is secured then you will need to
         #     set this to `https` & most likely set the tls config.
-        prometheus.io/path: /stats/prometheus
-        prometheus.io/port: 15020
+        # - prometheus.io/path: If the metrics path is not /metrics, define it with this annotation.
+        # - prometheus.io/port: If port is not 9102 use this annotation
         monitor_kubernetes_pods = true
+
         ## Restricts Kubernetes monitoring to namespaces for pods that have annotations set and are scraped using the monitor_kubernetes_pods setting.
         ## This will take effect when monitor_kubernetes_pods is set to true
         ##   ex: monitor_kubernetes_pods_namespaces = ["default1", "default2", "default3"]
-        # monitor_kubernetes_pods_namespaces = ["default1"]
+        # monitor_kubernetes_pods_namespaces = ["default"]
+
     [prometheus_data_collection_settings.node]
         # Node level scrape endpoint(s). These metrics will be scraped from agent's DaemonSet running in every node in the cluster
         # Any errors related to prometheus scraping can be found in the KubeMonAgentEvents table in the Log Analytics workspace that the cluster is sending data to.
+
         #Interval specifying how often to scrape for metrics. This is duration of time and can be specified for supporting settings by combining an integer value and time unit as a string value. Valid time units are ns, us (or µs), ms, s, m, h.
         interval = "1m"
+
         ## Uncomment the following settings with valid string arrays for prometheus scraping
+
         # An array of urls to scrape metrics from. $NODE_IP (all upper case) will substitute of running Node's IP address
         # urls = ["http://$NODE_IP:9103/metrics"]
+
         #fieldpass = ["metric_to_pass1", "metric_to_pass12"]
+
         #fielddrop = ["metric_to_drop"]
   alertable-metrics-configuration-settings: |-
     # Alertable metrics configuration settings for container resource utilization
@@ -97,3 +100,6 @@ data:
         container_memory_rss_threshold_percentage = 95.0
         # Threshold for container memoryWorkingSet, metric will be sent only when memory working set exceeds or becomes equal to the following percentage
         container_memory_working_set_threshold_percentage = 95.0
+metadata:
+  name: container-azm-ms-agentconfig
+  namespace: kube-system
