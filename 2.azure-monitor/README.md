@@ -111,5 +111,13 @@ kubectl logs omsagent-rs-5c5f869c9c-7sbnr -n kube-system
 You should see logs for FluentBit and Telegraf starting.
 
 ## How to view monitoring metrics on Azure Monitor
+On your AKS Azure console under your k8s service go to Logs and exit out of the recommended queries and run instead:
+```
+InsightsMetrics 
+| where Name contains "istio_requests_total"
+```
 
+You should be able to see the same metrics for `istio_requests_total` observed previously on Prometheus or when scraping the `sleep` or `hello-world` services:
+
+![](../images/prometheus-metrics.png)
  
