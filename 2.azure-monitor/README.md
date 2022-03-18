@@ -48,13 +48,15 @@ The recommended way to enable access logging is using the Telemetry API, see the
 Similar configuration can also be applied on an individual namespace, or to an individual workload, to control logging at a fine grained level.
 
 The following short lab presents a quick way to enable Istio access logging and observe it using Azure monitor.
+
+***
 ## Lab Prerequisites
 
 - AKS cluster
 - Monitoring enabled on your AKS instance
 - Workload with metrics exposed
 
-## Istio Access Logging on Azure Monitor
+## LAB: Istio Access Logging on Azure Monitor
 
 The Istio Telemetry API exposes a `Telemetry` resource that can be used to configure the mesh telemetry settings. The following can be used to enable envoy as the access log provider across the mesh:
 
@@ -160,12 +162,14 @@ This happens when you enable Monitoring on your AKS cluster and configure its ag
 
 The following lab presents the steps on how to enable this metrics integration.
 
+***
+
 ### Lab Prerequisites
 
 - AKS cluster
 - Monitoring enabled on your AKS instance
 - Workload with metrics exposed
-### Prometheus Style Metrics Lab
+### LAB: Prometheus Style Metrics
 
 Azure monitor supports Prometheus like monitoring by using the same annotations used on pods to report metrics used in a traditional Prometheus setup. Your pod needs to expose the endpoints to be scraped for monitoring and they can be discovered using the following annotations:
 ```
@@ -313,4 +317,33 @@ You should see now only `istio_requests_total` metrics for the `sleep` service.
 ***
 
  ## Distributed Tracing => Zipkin / Jaeger / Lightstep
-TLDR
+
+From Istio's documentation website: distributed tracing enables users to track a request through mesh that is distributed across multiple services. This allows a deeper understanding about request latency, serialization and parallelism via visualization.
+
+Istio leverages [Envoy’s distributed tracing](https://www.envoyproxy.io/docs/envoy/v1.12.0/intro/arch_overview/observability/tracing) feature to provide tracing integration out of the box. Specifically, Istio provides options to install various tracing backend and configure proxies to send trace spans to them automatically. See [Zipkin](https://istio.io/latest/docs/tasks/observability/distributed-tracing/zipkin/), [Jaeger](https://istio.io/latest/docs/tasks/observability/distributed-tracing/jaeger/) and [Lightstep](https://istio.io/latest/docs/tasks/observability/distributed-tracing/lightstep/) task docs about how Istio works with those tracing systems.
+
+Current efforts are trying to converge some of the presented observability concerns into an open standard to be used across the industry. [OpenTelemetry](https://opentelemetry.io/) is getting traction in this field and recently, Microsoft announced the adoption of the standard but there is a lot of work still to be done. See [here.](https://github.com/open-telemetry/opentelemetry-collector-contrib/issues/433)
+
+In the `OpenTelemetry` world, a collector is a vendor-agnostic implementation with the purpose to receive, process and export telemetry data.
+
+If the intention is to use Istio's out of the box distributed tracing configuration then please use Zipkin or Jaeger to explore further, but if the intention is to use Azure Monitor, then some integration using `OpenTelemetry` is needed.  
+
+The reason is because Istio's tracing is based on Envoy's tracing which uses `B3` headers to propagate and send the span information to be correlated into a single trace. At the time of writing, Azure Monitor's tracing is not compatible with `B3` headers and instead it uses `W3C` style headers. For this reason we need to use an `otel` (OpenTelemetry) collector to receive the Istio `B3` style headers and process them to be exported using and Azure compatible exporter with the purpose to get those traces to Azure Monitor's collector. 
+
+Using an `otel` collector, the tracing telemetry would flow like:
+
+`Envoy Sidecar -> Zipkin-style span data -> OTel -> azure span data -> Azure collector`
+
+The following lab brings hands-on experience in how to use this instrumentation.
+
+***
+
+### Lab Prerequisites
+
+- AKS cluster
+- Monitoring enabled on your AKS instance
+- Istio Service Mesh
+
+### LAB: Otel Collector to Azure Monitor
+
+Take a look at the file named `otel-collector.yaml` where we have four resources, a couple ConfigMaps, a DaemonSet and a Deployment.
