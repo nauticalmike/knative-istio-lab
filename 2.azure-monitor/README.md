@@ -346,4 +346,4 @@ The following lab brings hands-on experience in how to use this instrumentation.
 
 ### LAB: Otel Collector to Azure Monitor
 
-Take a look at the file named `otel-collector.yaml` where we have four resources, a couple ConfigMaps, a DaemonSet and a Deployment.
+Take a look at the file named `otel-config.yaml` where we have four resources, a couple ConfigMaps, a DaemonSet and a Deployment.
