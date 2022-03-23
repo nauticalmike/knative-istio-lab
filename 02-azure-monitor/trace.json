@@ -1,0 +1,27 @@
+[
+    {
+      "traceId": "5982fe77008310cc80f1da5e10147538",
+      "parentId": "90394f6bcffb5d16",
+      "id": "67fae42571535f62",
+      "kind": "SERVER",
+      "name": "/m/n/2.6.1",
+      "timestamp": 1647991383000000,
+      "duration": 26000,
+      "localEndpoint": {
+        "serviceName": "api"
+      },
+      "remoteEndpoint": {
+        "serviceName": "apip"
+      },
+      "tags": {
+        "otel.status_code": "OK",
+        "http.client_ip": "10.150.1.15",
+        "http.flavor": "1.1",
+        "http.host": "zipkin",
+        "http.method": "POST",
+        "http.scheme": "http",
+        "http.target": "/api/v2/spans",
+        "http.status_code": "202"
+      }
+    }
+  ]

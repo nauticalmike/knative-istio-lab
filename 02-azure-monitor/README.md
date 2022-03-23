@@ -326,16 +326,19 @@ Current efforts are trying to converge some of the presented observability conce
 
 In the `OpenTelemetry` world, a collector is a vendor-agnostic implementation with the purpose to receive, process and export telemetry data.
 
-If the intention is to use Istio's out of the box distributed tracing configuration then please use Zipkin or Jaeger to explore further, but if the intention is to use Azure Monitor, then some integration using `OpenTelemetry` is needed.  
+For Istio's out of the box distributed tracing configuration please use Zipkin or Jaeger to explore further, but if the intention is to use Azure Monitor, then some integration using `OpenTelemetry` is needed.  
 
-The reason is because Istio's tracing is based on Envoy's tracing which uses `B3` headers to propagate and send the span information to be correlated into a single trace. At the time of writing, Azure Monitor's tracing is not compatible with `B3` headers and instead it uses `W3C` style headers. For this reason we need to use an `otel` (OpenTelemetry) collector to receive the Istio `B3` style headers and process them to be exported using and Azure compatible exporter with the purpose to get those traces to Azure Monitor's collector. 
+Istio's tracing is based on Envoy's tracing which uses `B3` headers to propagate and send the span information to be correlated into a single trace. At the time of writing, Azure Monitor's tracing is not compatible with `B3` headers and instead it uses `W3C` style headers compatible with OpenTelemetry. 
+
+For this reason we need to use an `otel` (OpenTelemetry) collector to receive the Istio `B3` style headers and process them to be exported using and Azure compatible exporter with the purpose to get those traces to Azure Monitor's collector. 
 
 Using an `otel` collector, the tracing telemetry would flow like:
 
 `Envoy Sidecar -> Zipkin-style span data -> OTel -> azure span data -> Azure collector`
 
-The following lab brings hands-on experience in how to use this instrumentation.
-
+***
+NOTE:
+The following lab brings hands-on experience on how to use this instrumentation, but at the time of writing it is not an Azure supported OpenTelemetry exporter. Read more [here](https://docs.microsoft.com/en-us/azure/azure-monitor/app/opentelemetry-overview#sending-your-telemetry).
 ***
 
 ### Lab Prerequisites
@@ -343,7 +346,195 @@ The following lab brings hands-on experience in how to use this instrumentation.
 - AKS cluster
 - Monitoring enabled on your AKS instance
 - Istio Service Mesh
+- hello-world and sleep services
 
 ### LAB: Otel Collector to Azure Monitor
 
-Take a look at the file named `otel-config.yaml` where we have four resources, a couple ConfigMaps, a DaemonSet and a Deployment.
+The idea behind this Lab is to use an OpenTelemetry [collector](https://github.com/open-telemetry/opentelemetry-collector), specifically [this](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/exporter/azuremonitorexporter) collector to receive the mesh tracing data on a zipkin receiver and then export it using a custom `azuremonitorexporter` exporter.
+
+Take a look at the file named `otel-config.yaml` where we have three k8s resources, the otel ConfigMap, the otel collector Deployment and it's corresponding service.
+
+Note that there is an `instrumentation_key` property used on the ConfigMap, you can add your own key from the Overview section on your Application Insights:
+
+![](../images/azure-monitor-app-insights-instrumentation-key.png)
+
+You can also validate with the following command if `application-insights` extension was added to your AKS cluster:
+
+```
+az extension list
+```
+
+You should see an output like:
+
+```
+[
+  {
+    "experimental": false,
+    "extensionType": "whl",
+    "name": "application-insights",
+    "path": "/Users/nauticalmike/.azure/cliextensions/application-insights",
+    "preview": true,
+    "version": "0.1.15"
+  }
+]
+```
+
+You can also validate with the following command if your `ApplicationInsights` component is enabled:
+
+```
+az monitor app-insights component show
+```
+
+You should be able to see your `instrumentationKey`, `subscription` and `IngestionEndpoint`.
+
+Change the `otel-collector-conf` ConfigMap with the corresponding values of your `ApplicationInsights` instance and apply it:
+
+```
+kubectl apply -f otel-config.yaml 
+```
+
+Check the pods on the `tracing` ns to make sure the collector pod is up:
+
+```
+kubectl get pods -n tracing
+```
+
+Note that there is only one container corresponding to the collector and there is no sidecar. The `tracing` ns is not annotated for sidecar injection therefore the pods in this ns are not part of the mesh:
+
+```
+kubectl get ns -Listio-injection
+```
+
+Now lets check the collector logs to get some insights:
+
+```
+kubectl logs otel-collector-75754b9c66-rnq4k -n tracing
+```
+
+You should be able to see something like:
+
+```
+2022-03-22T20:45:05.098Z        info    service/collector.go:190        Applying configuration...
+2022-03-22T20:45:05.099Z        info    builder/exporters_builder.go:254        Exporter was built.     {"kind": "exporter", "name": "azuremonitor"}
+2022-03-22T20:45:05.100Z        info    builder/exporters_builder.go:254        Exporter was built.     {"kind": "exporter", "name": "logging"}
+2022-03-22T20:45:05.100Z        info    builder/pipelines_builder.go:222        Pipeline was built.     {"name": "pipeline", "name": "traces"}
+2022-03-22T20:45:05.100Z        info    builder/receivers_builder.go:224        Receiver was built.     {"kind": "receiver", "name": "zipkin", "datatype": "traces"}
+2022-03-22T20:45:05.101Z        info    service/service.go:86   Starting extensions...
+
+etc...
+
+2022-03-22T20:45:05.104Z        info    service/collector.go:239        Starting otelcontribcol...      {"Version": "bb95489", "NumCPU": 2}
+2022-03-22T20:45:05.104Z        info    service/collector.go:135        Everything is ready. Begin running and processing data.
+```
+
+Note how the two exporters we defined in the cm `azuremonitor` and `logging` were built as well as our `zipkin` receiver.
+
+
+Now lets generate a trace manually and send it to the collector service directly to check is working properly. Generate a timestamp and replace it on the `trace.json` file:
+
+```
+echo '('`date +"%s"."%n"` ' * 1000000)/1' | bc
+```
+
+Save the `trace.json` file and copy it to the sleep container:
+
+```
+kubectl cp trace.json default/$SLEEP_POD:/tmp
+```
+
+Now use the `sleep` service to send this trace directly to the collector's endpoint:
+
+```
+kubectl exec $SLEEP_POD -it -- curl otel-collector.tracing:9411/api/v2/spans -H "Content-Type: application/json" -d @/tmp/trace.json
+```
+
+Check again the collector logs and you should see an entry corresponding to the json object sent:
+
+```
+2022-03-22T23:23:30.351Z        INFO    loggingexporter/logging_exporter.go:40  TracesExporter  {"#spans": 1}
+2022-03-22T23:23:30.351Z        DEBUG   loggingexporter/logging_exporter.go:49  ResourceSpans #0
+Resource labels:
+     -> service.name: STRING(api)
+InstrumentationLibrarySpans #0
+InstrumentationLibrary  
+Span #0
+    Trace ID       : 5982fe77008310cc80f1da5e10147538
+    Parent ID      : 90394f6bcffb5d16
+    ID             : 67fae42571535f62
+    Name           : /m/n/2.6.1
+    Kind           : SPAN_KIND_SERVER
+    Start time     : 2022-03-22 23:23:03 +0000 UTC
+    End time       : 2022-03-22 23:23:03.026 +0000 UTC
+    Status code    : STATUS_CODE_UNSET
+    Status message : 
+Attributes:
+     -> http.method: STRING(POST)
+     -> http.scheme: STRING(http)
+     -> http.target: STRING(/api/v2/spans)
+     -> http.status_code: STRING(202)
+     -> http.client_ip: STRING(10.150.1.15)
+     -> http.flavor: STRING(1.1)
+     -> http.host: STRING(zipkin)
+     -> peer.service: STRING(apip)
+```
+
+Now that we know our collector is getting the traces correctly, we are going to change the mesh configuration to tell Istio where to send the Zipkin traces. This can be done live by editing the `istio` configmap on the `istio-system` ns:
+
+```
+kubectl edit cm istio -n istio-system
+```
+
+Change or add the address as follows:
+
+```
+defaultConfig:
+  tracing:
+    zipkin:
+      address: otel-collector.tracing.svc:9411
+```
+
+Which is where our collector lives. 
+
+Now we are going to generate some traffic using our previous `sleep` and `hello-world` services:
+
+```
+kubectl exec $SLEEP_POD -it -- curl hello.default
+kubectl exec $SLEEP_POD -it -- curl hello.default
+kubectl exec $SLEEP_POD -it -- curl hello.default
+```
+
+Now lets tail the collector logs again and you should see the traces coming in from the mesh:
+
+```
+2022-03-22T22:53:07.360Z        INFO    loggingexporter/logging_exporter.go:40  TracesExporter  {"#spans": 1}
+2022-03-22T22:53:07.360Z        DEBUG   loggingexporter/logging_exporter.go:49  ResourceSpans #0
+Resource labels:
+     -> service.name: STRING(autoscaler.knative-serving)
+InstrumentationLibrarySpans #0
+InstrumentationLibrary  
+Span #0
+    Trace ID       : 2b5bbe79c32624beeba0f59fa7fbef43
+    Parent ID      : 
+    ID             : eba0f59fa7fbef43
+    Name           : hello-world-private.default.svc.cluster.local:9090/*
+    Kind           : SPAN_KIND_CLIENT
+    Start time     : 2022-03-22 22:53:06.930776 +0000 UTC
+    End time       : 2022-03-22 22:53:06.932134 +0000 UTC
+    Status code    : STATUS_CODE_UNSET
+    Status message : 
+Attributes:
+etc..
+```
+
+Note to this point we proved how the `zipkin` receiver gets the traces from the mesh and then the collector's `logging` exporter logs the traces to the collector's container `stdout`. 
+
+The otel `azuremonitorexporter` job is to convert these traces to the Azure data model and send them to the defined endpoint using the `instrumentation_key`. Unfortunately there seems to be a bug on the exporter and the instrumentation is not working properly.
+
+If the instrumentation were to work according to the Azure telemetry API, then the zipkin-style (b3 headers) traces are converter to the W3C style OpenTelemetry uses and could be visible under:
+
+```
+Application Insights -> Logs -> query -> traces
+```
+
+![](../images/azure-monitor-app-insights-traces.png)
+
