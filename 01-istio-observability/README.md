@@ -90,6 +90,11 @@ Quick lab on how to use Istio + Knative
     kubectl apply -f sleep.yaml
     ```
 
+1. Capture the name of the sleep pod to an environment variable:
+    ```
+    export SLEEP_POD=$(kubectl get pod -l app=sleep -ojsonpath='{.items[0].metadata.name}')
+    ```
+
 1. Now lets test accessing from sleep service to `hello-world` service directly wihin the mesh:
     ```
     kubectl exec $SLEEP_POD -it -- curl hello.default
