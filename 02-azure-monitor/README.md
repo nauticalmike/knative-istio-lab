@@ -1,6 +1,14 @@
 # Istio Observability on Azure Monitor
 
-The purpose of this lab is to explore the current options available to export Istio known observability mechanisms to Azure Monitor, including concerns like: logging, distributed tracing, metrics, dashboards and service mesh consoles.  
+The purpose of this lab is to explore the current options available to export Istio known observability mechanisms to Azure Monitor, including concerns like: 
+
+- Service mesh console
+- Centralized Dashboards
+- Logging
+- Metrics
+- Distributed tracing
+
+***
 
 ## Service Mesh Console => Kiali
 
@@ -54,7 +62,7 @@ The following short lab presents a quick way to enable Istio access logging and 
 
 - AKS cluster
 - Monitoring enabled on your AKS instance
-- Workload with metrics exposed
+- `sleep` and `hello-world` Workloads with metrics exposed
 
 ## LAB: Istio Access Logging on Azure Monitor
 
@@ -98,26 +106,27 @@ Or when using the `istioctl install` command:
 istioctl install <flags-you-used-to-install-Istio> --set meshConfig.accessLogFile=/dev/stdout
 ```
 
-Now that you have all the configuration in place, generate some load from the `sleep` service to the `hello-world` service:
+Now that you have the configuration for access logging in place, generate some load from the `sleep` service to the `hello-world` service:
 
 ```
 kubectl exec $SLEEP_POD -it -- curl hello.default
 ```
 
-Now you can inspect the logs for each service `istio-proxy` containers and you should see the request source and destination:
+Inspect the logs for each service's `istio-proxy` container and you should see the request source and destination:
 
-`sleep`:
+For `sleep`:
 ```
-kubectl logs sleep-557747455f-8f4xc -c istio-proxy
+kubectl logs $SLEEP_POD -c istio-proxy
 ```
 expect a log like:
 ```
 [2022-03-17T19:39:58.072Z] "GET / HTTP/1.1" 200 - via_upstream - "-" 0 13 2445 2444 "-" "curl/7.82.0-DEV" "a2a491d6-4e30-455f-a81d-8029a4dc5f31" "hello.default" "10.150.0.186:8012" outbound|80||hello-world.default.svc.cluster.local 10.150.1.21:46372 10.0.28.127:80 10.150.1.21:43916
 ```
 
-Now on the `hello-world`:
+Now for `hello-world`:
 ```
-kubectl logs hello-world-deployment-cc647cf6d-bmpcp -c istio-proxy
+export HELLO_POD=$(kubectl get pod -l app=hello-world -ojsonpath='{.items[0].metadata.name}')
+kubectl logs $HELLO_POD -c istio-proxy
 ```
 expect a log like:
 ```
@@ -147,11 +156,7 @@ You should expect to see something similar to this:
 NOTE:
 Take into account Azure Monitor agents takes  more time than other agents in this space to report logs and it could take up to 20 minutes for them to appear on the monitoring side.
 ***
-
-***
 NOTE: If you don't want to use Azure built-in agents to "ship" the logs to Azure, there are other alternatives like using FluentBit directly. Note too that these Azure agents are actually based on FluentBit and Telegraf.
-***
-
 ***
 
 ## Metrics => Prometheus
@@ -168,7 +173,7 @@ The following lab presents the steps on how to enable this metrics integration.
 
 - AKS cluster
 - Monitoring enabled on your AKS instance
-- Workload with metrics exposed
+- `sleep` and `hello-world` Workloads with metrics exposed
 ### LAB: Prometheus Style Metrics
 
 Azure monitor supports Prometheus like monitoring by using the same annotations used on pods to report metrics used in a traditional Prometheus setup. Your pod needs to expose the endpoints to be scraped for monitoring and they can be discovered using the following annotations:
@@ -178,15 +183,10 @@ prometheus.io/path: '/data/metrics'
 prometheus.io/port: '80'
 ```
 
-For our lab example we are going to deploy the `sleep` sample app and describe its pod:
-```
-kubectl apply -f sleep.yaml
-```
-
-Using our sleep pod example we can `describe` the pod:
+Using our `sleep` pod example we can check the pod's annotations:
 
 ```
-kubectl describe pod sleep-557747455f-8f4xc
+kubectl  get pod $SLEEP_POD -o jsonpath='{.metadata.annotations}' | yq -P
 ```
 
 Now observe the following annotations:
@@ -196,15 +196,35 @@ prometheus.io/port: 15020
 prometheus.io/scrape: true
 ```
 
-This annotations are used to "tell" Prometheus if this pod should be scrapped and the path/port where to do it. Azure Monitor integrations leverages these same annotations without the need to have a Prometheus instance running.
+These annotations are used to "tell" Prometheus if this pod should be scrapped and the path/port where to do it. Azure Monitor integrations leverages these same annotations without the need to have a Prometheus instance running.
 
 If you remote shell into your sleep pod you can see the stats being exposed on the path mentioned above:
 
 ```
-kubectl exec sleep-557747455f-8f4xc -it -- curl localhost:15020/stats/prometheus
+kubectl exec $SLEEP_POD -it -- curl localhost:15020/stats/prometheus
 ```
 
-You should see different key-value pairs being printout corresponding to the metrics exposed.
+You should see different key-value pairs being printout corresponding to the metrics exposed, like:
+
+```
+istio_agent_pilot_xds_push_time_bucket{type="sds",le="0.01"} 2
+istio_agent_pilot_xds_push_time_bucket{type="sds",le="0.1"} 2
+istio_agent_pilot_xds_push_time_bucket{type="sds",le="1"} 2
+istio_agent_pilot_xds_push_time_bucket{type="sds",le="3"} 2
+istio_agent_pilot_xds_push_time_bucket{type="sds",le="5"} 2
+istio_agent_pilot_xds_push_time_bucket{type="sds",le="10"} 2
+istio_agent_pilot_xds_push_time_bucket{type="sds",le="20"} 2
+istio_agent_pilot_xds_push_time_bucket{type="sds",le="30"} 2
+istio_agent_pilot_xds_push_time_bucket{type="sds",le="+Inf"} 2
+istio_agent_pilot_xds_push_time_sum{type="sds"} 0.001536782
+istio_agent_pilot_xds_push_time_count{type="sds"} 2
+```
+
+You can check the `hello-world` pod the same way:
+
+```
+kubectl exec $HELLO_POD -it -- curl localhost:15020/stats/prometheus | grep istio
+```
 
 Now that we know our workload exposes "prometheus-style" metrics and having Azure monitoring enabled on your AKS cluster, lets validate we have the insights agent pods running:
 
@@ -237,7 +257,7 @@ kubectl apply -f container-azm-ms-agentconfig.yaml
 Now list all the pods on the `kube-system` ns and look for the pod name starting `omsagent-rs-` which should be restarting with the new settings. In order to make sure the new configuration took effect, you need to inspect the logs after the pod has restarted:
 
 ```
-kubectl logs omsagent-rs-5c5f869c9c-7sbnr -n kube-system
+kubectl logs omsagent-rs-<YOUR_RS> -n kube-system
 ```
 
 ***
@@ -390,8 +410,11 @@ You should be able to see your `instrumentationKey`, `subscription` and `Ingesti
 Change the `otel-collector-conf` ConfigMap with the corresponding values of your `ApplicationInsights` instance and apply it:
 
 ```
+kubectl create ns tracing
 kubectl apply -f otel-config.yaml 
 ```
+
+Take a moment to check the resources just applied.
 
 Check the pods on the `tracing` ns to make sure the collector pod is up:
 
